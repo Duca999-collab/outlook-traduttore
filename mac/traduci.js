@@ -7,12 +7,28 @@
  *   osascript -l JavaScript "$HOME/.local/share/traduttore-mail/traduci.js"
  * Modalità diagnostica (non tocca la tastiera, traduce gli appunti):
  *   osascript -l JavaScript .../traduci.js appunti
+ *
+ * Avviato da Comandi Rapidi, lo script NON invia direttamente i tasti ⌘C/⌘V
+ * (macOS li attribuirebbe a osascript): costruisce una volta la piccola app
+ * "Traduttore Mail.app" e la lancia in background. Il permesso di Accessibilità
+ * si dà solo a quell'app. L'app carica questo stesso file a ogni esecuzione,
+ * quindi gli aggiornamenti non richiedono di ricostruirla.
  */
 ObjC.import("AppKit");
 ObjC.import("Foundation");
 
 var window = this; // per core.js / clip-engine.js
 var DIR = ObjC.unwrap($("~/.local/share/traduttore-mail").stringByExpandingTildeInPath);
+var IN_APPLET = (typeof __TRAD_APPLET !== "undefined");
+var APPLET = DIR + "/Traduttore Mail.app";
+var APPLET_VERSION = "1";
+var APPLET_LOADER = [
+  "var __TRAD_APPLET = true;",
+  "ObjC.import('Foundation');",
+  "var __p = ObjC.unwrap($('~/.local/share/traduttore-mail/traduci.js').stringByExpandingTildeInPath);",
+  "eval(ObjC.unwrap($.NSString.stringWithContentsOfFileEncodingError(__p, $.NSUTF8StringEncoding, null)));",
+  "function run(argv) { return __tradRun(argv); }"
+].join("\n");
 var KC_SERVICE = "traduttore-mail", KC_ACCOUNT = "anthropic";
 var app = Application.currentApplication();
 app.includeStandardAdditions = true;
@@ -174,15 +190,59 @@ function translate(clip, settings, key) {
   return t.skipped ? null : { kind: "text", text: t.text, boundary: t.boundary };
 }
 
+function openPrivacy(pane) {
+  try { sh("open 'x-apple.systempreferences:com.apple.preference.security?" + pane + "'"); } catch (e) { /* */ }
+}
+
 function friendly(e) {
   var m = (e && e.message) || String(e);
-  if (/1002|non è autorizzat|not allowed to send keystrokes|assistive/i.test(m)) {
-    return "Serve il permesso di Accessibilità: Impostazioni di Sistema → Privacy e sicurezza → Accessibilità → attiva Comandi Rapidi.";
+  var n = e && e.errorNumber;
+  if (n === 1002 || /1002|non è consentit|non è autorizzat|not allowed to send keystrokes|assistive/i.test(m)) {
+    openPrivacy("Privacy_Accessibility");
+    return "Attiva \"Traduttore Mail\" in Privacy e sicurezza → Accessibilità, poi riprova.";
+  }
+  if (n === -1743 || /-1743|Not authorized to send Apple events|non è autorizzato a inviare eventi/i.test(m)) {
+    openPrivacy("Privacy_Automation");
+    return "Consenti a \"Traduttore Mail\" di controllare System Events (Privacy e sicurezza → Automazione), poi riprova.";
   }
   return m;
 }
 
-function run(argv) {
+// ---------------------------------------------------------------- app dedicata
+function ensureApplet() {
+  var marker = DIR + "/.applet-version";
+  var exists = $.NSFileManager.defaultManager.fileExistsAtPath(APPLET + "/Contents/Info.plist");
+  if (exists && (readFile(marker) || "").trim() === APPLET_VERSION) return;
+  var src = DIR + "/applet-loader.js";
+  writeFile(src, APPLET_LOADER);
+  var plist = APPLET + "/Contents/Info.plist";
+  sh("rm -rf " + q(APPLET) +
+     " && /usr/bin/osacompile -l JavaScript -o " + q(APPLET) + " " + q(src) +
+     " && /usr/bin/plutil -replace LSUIElement -bool true " + q(plist) +
+     " && /usr/bin/plutil -replace CFBundleIdentifier -string it.riccardo.traduttore-mail " + q(plist) +
+     " && /usr/bin/codesign -f -s - " + q(APPLET) + " 2>&1");
+  writeFile(marker, APPLET_VERSION);
+  log("app Traduttore Mail costruita");
+}
+
+function launchApplet() {
+  ensureApplet();
+  sh("/usr/bin/open -g " + q(APPLET));
+}
+
+function __tradRun(argv) {
+  var mode = (argv && argv[0]) || "";
+  if (!IN_APPLET && mode !== "appunti" && mode !== "diretto") {
+    try { launchApplet(); }
+    catch (e) { log("ERRORE avvio app: " + ((e && e.message) || e)); notify((e && e.message) || String(e), "Avvio non riuscito"); }
+    return;
+  }
+  return main(argv);
+}
+
+function run(argv) { return __tradRun(argv); }
+
+function main(argv) {
   var mode = (argv && argv[0]) || "";
   var t0 = Date.now();
   try {
