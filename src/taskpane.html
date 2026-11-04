@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traduttore Mail</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="taskpane.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Traduttore Mail</h1>
+      <p class="sub">Traduce la bozza direttamente nella mail, mantenendo la formattazione.</p>
+    </header>
+
+    <section class="card">
+      <label class="field">
+        <span>Lingua di destinazione</span>
+        <select id="target"></select>
+      </label>
+      <button id="btnTranslate" class="primary">Traduci mail</button>
+      <p class="hint">Con del testo selezionato traduce solo la selezione. Altrimenti tutto quello che hai scritto, senza toccare il thread citato.</p>
+
+      <label class="check"><input type="checkbox" id="excludeSignature"> Non tradurre la firma</label>
+      <label class="check"><input type="checkbox" id="translateSubject"> Traduci anche l'oggetto (solo mail nuove)</label>
+
+      <button id="btnUndo" class="secondary">Ripristina testo originale</button>
+      <div id="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <details id="settings" class="card">
+      <summary>Impostazioni</summary>
+
+      <label class="field">
+        <span>Chiave API Anthropic</span>
+        <div class="row">
+          <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+          <button id="btnShowKey" class="ghost" type="button" aria-label="Mostra chiave">👁</button>
+        </div>
+        <small>Si crea su console.anthropic.com → API Keys. Resta salvata nelle impostazioni dell'add-in della tua casella.</small>
+      </label>
+
+      <label class="field">
+        <span>Modello</span>
+        <select id="model"></select>
+      </label>
+
+      <label class="field">
+        <span>Registro</span>
+        <select id="style">
+          <option value="business">Business — professionale</option>
+          <option value="formale">Formale — enti, legali, direzione</option>
+          <option value="diretto">Diretto — colleghi</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Glossario obbligatorio</span>
+        <textarea id="glossary" rows="5" spellcheck="false" placeholder="una voce per riga: termine = traduzione"></textarea>
+        <small>Una voce per riga, formato <code>termine = traduzione</code>. Le righe che iniziano con # sono ignorate.</small>
+      </label>
+
+      <label class="field">
+        <span>Istruzioni aggiuntive</span>
+        <textarea id="instructions" rows="3" placeholder="es. dai sempre del 'you' senza formule di cortesia eccessive"></textarea>
+      </label>
+
+      <div class="row gap">
+        <button id="btnSave" class="primary small">Salva</button>
+        <button id="btnTest" class="secondary small">Verifica chiave</button>
+      </div>
+    </details>
+
+    <footer>Il testo viene inviato all'API di Anthropic solo quando premi Traduci.</footer>
+  </main>
+
+  <script src="core.js"></script>
+  <script src="office-bridge.js"></script>
+  <script src="taskpane.js"></script>
+</body>
+</html>
