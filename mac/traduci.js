@@ -119,6 +119,19 @@ function pbString(type) {
   return s.isNil() ? null : ObjC.unwrap(s);
 }
 
+function pbTypes() {
+  try { return ObjC.deepUnwrap(pb.types) || []; } catch (e) { return []; }
+}
+
+// Diagnosi: conserva solo l'ultima esecuzione (sovrascritta ogni volta)
+function debugDump(name, content) {
+  try {
+    var d = DIR + "/debug";
+    $.NSFileManager.defaultManager.createDirectoryAtPathWithIntermediateDirectoriesAttributesError(d, true, $(), null);
+    writeFile(d + "/" + name, String(content).slice(0, 200000));
+  } catch (e) { /* */ }
+}
+
 function readClipboard() {
   var html = pbString("public.html");
   if (html && /\S/.test(html)) return { kind: "html", html: html };
@@ -141,10 +154,14 @@ function writeClipboard(clip) {
     writeFile(tmp + ".html", clip.html);
     var plain = "", rtfData = null;
     try { plain = sh("textutil -convert txt -stdout -inputencoding UTF-8 " + q(tmp + ".html")); } catch (e) { /* */ }
-    try {
-      sh("textutil -convert rtf -inputencoding UTF-8 -output " + q(tmp + ".rtf") + " " + q(tmp + ".html"));
-      rtfData = $.NSData.dataWithContentsOfFile(tmp + ".rtf");
-    } catch (e) { /* */ }
+    // RTF solo se l'app di origine aveva fornito solo RTF: Outlook per Mac,
+    // se trova un RTF generato da textutil, lo incolla come oggetto illeggibile.
+    if (clip.fromRtf) {
+      try {
+        sh("textutil -convert rtf -inputencoding UTF-8 -output " + q(tmp + ".rtf") + " " + q(tmp + ".html"));
+        rtfData = $.NSData.dataWithContentsOfFile(tmp + ".rtf");
+      } catch (e) { /* */ }
+    }
     pb.setStringForType($(clip.html), "public.html");
     if (rtfData && !rtfData.isNil()) pb.setDataForType(rtfData, "public.rtf");
     pb.setStringForType($(plain.replace(/\n$/, "")), "public.utf8-plain-text");
@@ -266,14 +283,20 @@ function main(argv) {
       }
     }
 
+    var typesIn = pbTypes();
     var clip = readClipboard();
     if (!clip) { notify("Niente da tradurre negli appunti."); return; }
+    debugDump("1-tipi-appunti.txt", (bundle || mode) + "\n" + typesIn.join("\n"));
+    debugDump("2-originale." + (clip.kind === "html" ? "html" : "txt"), clip.kind === "html" ? clip.html : clip.text);
     var lang = TradCore.LANGUAGE_LABELS[settings.target] || settings.target;
     notify("Traduzione in " + lang + " in corso…");
 
     var res = translate(clip, settings, key);
     if (!res) { notify("Niente da tradurre (solo firma o thread)."); return; }
+    res.fromRtf = !!clip.fromRtf;
     writeClipboard(res);
+    debugDump("3-tradotto." + (res.kind === "html" ? "html" : "txt"), res.kind === "html" ? res.html : res.text);
+    debugDump("4-tipi-scritti.txt", pbTypes().join("\n"));
 
     var secs = ((Date.now() - t0) / 1000).toFixed(1);
     var note = res.boundary ? (res.boundary === "firma" ? " · firma e thread esclusi" : " · thread escluso") : "";
