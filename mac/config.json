@@ -1,0 +1,8 @@
+{
+  "target": "en-GB",
+  "model": "claude-sonnet-5-5",
+  "style": "business",
+  "glossary": "PCS = GCV (Gross Calorific Value)",
+  "instructions": "",
+  "excludeSignature": true
+}
